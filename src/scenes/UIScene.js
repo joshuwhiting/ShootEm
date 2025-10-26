@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { GAME_WIDTH, GAME_HEIGHT } from '../index';
 
 export default class UIScene extends Phaser.Scene {
     constructor() {
@@ -42,7 +43,7 @@ export default class UIScene extends Phaser.Scene {
         });
         
         // Upgrade button
-        const upgradeButton = this.add.text(1280 - padding, padding, '[U] UPGRADES', {
+        const upgradeButton = this.add.text(GAME_WIDTH - padding, padding, '[U] UPGRADES', {
             fontSize: '18px',
             color: '#ffffff',
             backgroundColor: '#004400',
@@ -75,8 +76,8 @@ export default class UIScene extends Phaser.Scene {
     }
     
     createUpgradeMenu() {
-        const centerX = 640;
-        const centerY = 360;
+        const centerX = GAME_WIDTH / 2;
+        const centerY = GAME_HEIGHT / 2;
         const menuWidth = 600;
         const menuHeight = 500;
         
@@ -215,7 +216,9 @@ export default class UIScene extends Phaser.Scene {
             }
             
             // Visual feedback
-            const feedbackText = this.add.text(640, 150, `${upgradeData.name} Purchased!`, {
+            const centerX = GAME_WIDTH / 2;
+            const centerY = GAME_HEIGHT / 2;
+            const feedbackText = this.add.text(centerX, 150, `${upgradeData.name} Purchased!`, {
                 fontSize: '24px',
                 color: '#00ff00',
                 stroke: '#000000',
@@ -231,7 +234,7 @@ export default class UIScene extends Phaser.Scene {
             });
             
             // Play sound effect (visual feedback since we don't have sounds)
-            const flash = this.add.circle(640, 360, 50, 0x00ff00, 0.3).setDepth(2000);
+            const flash = this.add.circle(centerX, centerY, 50, 0x00ff00, 0.3).setDepth(2000);
             this.tweens.add({
                 targets: flash,
                 scale: 10,
@@ -241,7 +244,8 @@ export default class UIScene extends Phaser.Scene {
             });
         } else {
             // Not enough money feedback
-            const feedbackText = this.add.text(640, 150, 'Not enough gold!', {
+            const centerX = GAME_WIDTH / 2;
+            const feedbackText = this.add.text(centerX, 150, 'Not enough gold!', {
                 fontSize: '24px',
                 color: '#ff0000',
                 stroke: '#000000',

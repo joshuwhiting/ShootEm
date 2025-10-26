@@ -1,8 +1,12 @@
 import Phaser from 'phaser';
+import { GAME_WIDTH, GAME_HEIGHT } from '../index';
 
 export default class GameScene extends Phaser.Scene {
     constructor() {
         super('GameScene');
+        
+        // Constants
+        this.XP_LEVEL_MULTIPLIER = 1.5;
         
         // Game state
         this.player = null;
@@ -75,7 +79,8 @@ export default class GameScene extends Phaser.Scene {
         this.scene.launch('UIScene', { gameScene: this });
         
         // Instructions
-        this.add.text(640, 50, 'WASD: Move | Auto-Shoot | T: Place Turret (50 gold)', {
+        const centerX = GAME_WIDTH / 2;
+        this.add.text(centerX, 50, 'WASD: Move | Auto-Shoot | T: Place Turret (50 gold)', {
             fontSize: '16px',
             color: '#ffffff',
             backgroundColor: '#000000',
@@ -85,7 +90,9 @@ export default class GameScene extends Phaser.Scene {
     
     createPlayer() {
         // Create player sprite
-        this.player = this.add.circle(640, 360, 15, 0x00ff00);
+        const centerX = GAME_WIDTH / 2;
+        const centerY = GAME_HEIGHT / 2;
+        this.player = this.add.circle(centerX, centerY, 15, 0x00ff00);
         this.physics.add.existing(this.player);
         this.player.body.setCollideWorldBounds(true);
         this.player.body.setCircle(15);
@@ -225,23 +232,24 @@ export default class GameScene extends Phaser.Scene {
         // Spawn at random edge of screen
         let x, y;
         const edge = Math.floor(Math.random() * 4);
+        const spawnMargin = 20;
         
         switch(edge) {
             case 0: // top
-                x = Math.random() * 1280;
-                y = -20;
+                x = Math.random() * GAME_WIDTH;
+                y = -spawnMargin;
                 break;
             case 1: // right
-                x = 1300;
-                y = Math.random() * 720;
+                x = GAME_WIDTH + spawnMargin;
+                y = Math.random() * GAME_HEIGHT;
                 break;
             case 2: // bottom
-                x = Math.random() * 1280;
-                y = 740;
+                x = Math.random() * GAME_WIDTH;
+                y = GAME_HEIGHT + spawnMargin;
                 break;
             case 3: // left
-                x = -20;
-                y = Math.random() * 720;
+                x = -spawnMargin;
+                y = Math.random() * GAME_HEIGHT;
                 break;
         }
         
@@ -339,14 +347,16 @@ export default class GameScene extends Phaser.Scene {
         while (this.playerStats.xp >= this.playerStats.xpToNextLevel) {
             this.playerStats.xp -= this.playerStats.xpToNextLevel;
             this.playerStats.level++;
-            this.playerStats.xpToNextLevel = Math.floor(this.playerStats.xpToNextLevel * 1.5);
+            this.playerStats.xpToNextLevel = Math.floor(this.playerStats.xpToNextLevel * this.XP_LEVEL_MULTIPLIER);
             
             // Level up rewards
             this.playerStats.maxHealth += 20;
             this.playerStats.health = this.playerStats.maxHealth;
             
             // Show level up notification
-            const text = this.add.text(640, 360, 'LEVEL UP!', {
+            const centerX = GAME_WIDTH / 2;
+            const centerY = GAME_HEIGHT / 2;
+            const text = this.add.text(centerX, centerY, 'LEVEL UP!', {
                 fontSize: '48px',
                 color: '#ffff00',
                 stroke: '#000000',
@@ -454,16 +464,18 @@ export default class GameScene extends Phaser.Scene {
         this.physics.pause();
         
         // Show game over screen
-        const bg = this.add.rectangle(640, 360, 1280, 720, 0x000000, 0.8).setDepth(2000);
+        const centerX = GAME_WIDTH / 2;
+        const centerY = GAME_HEIGHT / 2;
+        const bg = this.add.rectangle(centerX, centerY, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.8).setDepth(2000);
         
-        const text = this.add.text(640, 300, 'GAME OVER', {
+        const text = this.add.text(centerX, 300, 'GAME OVER', {
             fontSize: '64px',
             color: '#ff0000',
             stroke: '#000000',
             strokeThickness: 8
         }).setOrigin(0.5).setDepth(2001);
         
-        const statsText = this.add.text(640, 380, 
+        const statsText = this.add.text(centerX, 380, 
             `Level: ${this.playerStats.level}\nWave: ${this.wave}\n\nPress R to Restart`, {
             fontSize: '24px',
             color: '#ffffff',
