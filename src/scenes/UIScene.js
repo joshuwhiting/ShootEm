@@ -65,9 +65,9 @@ export default class UIScene extends Phaser.Scene {
     }
     
     update() {
-        if (!this.gameScene || !this.gameScene.playerStats) return;
+        if (!this.gameScene || !this.gameScene.getPlayerStats()) return;
         
-        const stats = this.gameScene.playerStats;
+        const stats = this.gameScene.getPlayerStats();
         
         this.levelText.setText(`Level: ${stats.level}`);
         this.healthText.setText(`HP: ${Math.max(0, Math.floor(stats.health))}/${stats.maxHealth}`);
@@ -202,9 +202,9 @@ export default class UIScene extends Phaser.Scene {
     }
     
     purchaseUpgrade(upgradeData) {
-        if (!this.gameScene || !this.gameScene.playerStats) return;
+        if (!this.gameScene || !this.gameScene.getPlayerStats()) return;
         
-        const stats = this.gameScene.playerStats;
+        const stats = this.gameScene.getPlayerStats();
         
         if (stats.money >= upgradeData.cost) {
             stats.money -= upgradeData.cost;

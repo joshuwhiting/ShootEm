@@ -7,17 +7,22 @@
     "start": "webpack serve --mode development",
     "build": "webpack --mode production"
   },
-  "keywords": ["phaser", "game", "shooter"],
+  "keywords": [
+    "phaser",
+    "game",
+    "shooter"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "grid-engine": "^2.48.2",
     "phaser": "^3.70.0"
   },
   "devDependencies": {
+    "copy-webpack-plugin": "^11.0.0",
+    "html-webpack-plugin": "^5.5.3",
     "webpack": "^5.88.0",
     "webpack-cli": "^5.1.4",
-    "webpack-dev-server": "^4.15.1",
-    "html-webpack-plugin": "^5.5.3",
-    "copy-webpack-plugin": "^11.0.0"
+    "webpack-dev-server": "^4.15.1"
   }
 }

@@ -1,86 +1,151 @@
 import Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT } from '../index';
+import Player from '../entities/Player';
+import EnemyManager from '../entities/EnemyManager';
+import TurretManager from '../entities/TurretManager';
+
 
 export default class GameScene extends Phaser.Scene {
     constructor() {
         super('GameScene');
         
-        // Constants
-        this.XP_LEVEL_MULTIPLIER = 1.5;
-        
-        // Game state
+        // Game entities
         this.player = null;
-        this.enemies = null;
+        this.enemyManager = null;
+        this.turretManager = null;
         this.projectiles = null;
-        this.turrets = null;
         this.cursors = null;
         this.keys = {};
         
-        // Player stats
-        this.playerStats = {
-            maxHealth: 100,
-            health: 100,
-            speed: 200,
-            fireRate: 500,
-            lastFired: 0,
-            projectileSpeed: 400,
-            projectileDamage: 10,
-            level: 1,
-            xp: 0,
-            xpToNextLevel: 100,
-            money: 0
-        };
+        // Grid settings
+        this.TILE_SIZE = 32;
+        this.GRID_WIDTH = 40;
+        this.GRID_HEIGHT = 25;
+    }
+    
+    preload() {
+        // Create a simple tileset texture programmatically
+        this.createTilesetTexture();
+    }
+    
+    
+    createTilesetTexture() {
+        // Create a canvas for our tileset
+        const canvas = this.add.graphics();
         
-        // Turret stats
-        this.turretCost = 50;
-        this.turretStats = {
-            fireRate: 1000,
-            projectileSpeed: 300,
-            projectileDamage: 15,
-            range: 300
-        };
+        // Create wall tile (dark gray)
+        canvas.fillStyle(0x444444);
+        canvas.fillRect(0, 0, this.TILE_SIZE, this.TILE_SIZE);
+        canvas.lineStyle(1, 0x666666);
+        canvas.strokeRect(0, 0, this.TILE_SIZE, this.TILE_SIZE);
         
-        // Enemy spawn
-        this.enemySpawnTimer = 0;
-        this.enemySpawnRate = 2000;
-        this.wave = 1;
+        // Create floor tile (light gray)
+        canvas.fillStyle(0x888888);
+        canvas.fillRect(this.TILE_SIZE, 0, this.TILE_SIZE, this.TILE_SIZE);
+        canvas.lineStyle(1, 0xaaaaaa);
+        canvas.strokeRect(this.TILE_SIZE, 0, this.TILE_SIZE, this.TILE_SIZE);
+        
+        // Generate texture from graphics
+        canvas.generateTexture('tileset', this.TILE_SIZE * 2, this.TILE_SIZE);
+        canvas.destroy();
+    }
+    
+    createTilemapData() {
+        // Create tilemap data programmatically
+        const mapData = [];
+        
+        for (let y = 0; y < this.GRID_HEIGHT; y++) {
+            const row = [];
+            for (let x = 0; x < this.GRID_WIDTH; x++) {
+                // Create walls around the border, floor everywhere else
+                if (x === 0 || x === this.GRID_WIDTH - 1 || y === 0 || y === this.GRID_HEIGHT - 1) {
+                    row.push(1); // Wall tile
+                } else {
+                    row.push(2); // Floor tile
+                }
+            }
+            mapData.push(row);
+        }
+        
+        return mapData;
     }
     
     create() {
-        // Create groups
-        this.enemies = this.physics.add.group();
-        this.projectiles = this.physics.add.group();
-        this.turrets = this.physics.add.group();
+        // For now, let's create a simple world without Grid Engine tilemap collision
+        // and use physics collision instead to get the game working
         
-        // Create player
-        this.createPlayer();
+        // Create a simple background
+        this.createSimpleBackground();
+        
+        // Create invisible walls for physics collision
+        this.createPhysicsWalls();
+        
+        // Create projectiles group
+        this.projectiles = this.physics.add.group();
+        
+        // Create game entities
+        this.player = new Player(this);
+        this.enemyManager = new EnemyManager(this);
+        this.turretManager = new TurretManager(this);
+        
+        // Initialize entities
+        const playerSprite = this.player.create();
+        const enemiesGroup = this.enemyManager.create();
+        const turretsGroup = this.turretManager.create();
         
         // Setup controls
         this.setupControls();
         
-        // Setup collisions
+        // Setup collisions with walls
+        this.physics.add.collider(playerSprite, this.walls);
+        this.physics.add.collider(enemiesGroup, this.walls);
+        
+        // Setup collisions with turrets
+        this.physics.add.collider(playerSprite, turretsGroup);
+        this.physics.add.collider(enemiesGroup, turretsGroup);
+        
+        // Setup entity collisions
         this.physics.add.overlap(
             this.projectiles,
-            this.enemies,
-            this.hitEnemy,
+            enemiesGroup,
+            (projectile, enemy) => this.enemyManager.hitEnemy(
+                projectile, 
+                enemy, 
+                (xp, money) => {
+                    this.player.gainXP(xp);
+                    this.player.gainMoney(money);
+                }
+            ),
             null,
             this
         );
         
         this.physics.add.overlap(
-            this.player,
-            this.enemies,
-            this.playerHit,
+            playerSprite,
+            enemiesGroup,
+            (player, enemy) => {
+                this.enemyManager.playerHit(player, enemy, (damage) => {
+                    const isGameOver = this.player.takeDamage(damage);
+                    if (isGameOver) {
+                        this.gameOver();
+                    }
+                });
+            },
             null,
             this
         );
+        
+        // Setup camera to follow player with pixel-perfect positioning
+        this.cameras.main.startFollow(playerSprite);
+        this.cameras.main.setBounds(0, 0, this.GRID_WIDTH * this.TILE_SIZE, this.GRID_HEIGHT * this.TILE_SIZE);
+        this.cameras.main.roundPixels = true; // Force pixel-perfect camera
         
         // Start UI scene
         this.scene.launch('UIScene', { gameScene: this });
         
         // Instructions
         const centerX = GAME_WIDTH / 2;
-        this.add.text(centerX, 50, 'WASD: Move | Auto-Shoot | T: Place Turret (50 gold)', {
+        this.add.text(centerX, 50, 'WASD: Move | Auto-Shoot | T: Open Turret Shop', {
             fontSize: '16px',
             color: '#ffffff',
             backgroundColor: '#000000',
@@ -88,15 +153,54 @@ export default class GameScene extends Phaser.Scene {
         }).setOrigin(0.5).setScrollFactor(0).setDepth(100);
     }
     
-    createPlayer() {
-        // Create player sprite
-        const centerX = GAME_WIDTH / 2;
-        const centerY = GAME_HEIGHT / 2;
-        this.player = this.add.circle(centerX, centerY, 15, 0x00ff00);
-        this.physics.add.existing(this.player);
-        this.player.body.setCollideWorldBounds(true);
-        this.player.body.setCircle(15);
+    createSimpleBackground() {
+        // Create a simple tiled background
+        const graphics = this.add.graphics();
+        
+        for (let x = 0; x < this.GRID_WIDTH; x++) {
+            for (let y = 0; y < this.GRID_HEIGHT; y++) {
+                const isWall = (x === 0 || x === this.GRID_WIDTH - 1 || y === 0 || y === this.GRID_HEIGHT - 1);
+                
+                graphics.fillStyle(isWall ? 0x444444 : 0x888888);
+                graphics.fillRect(x * this.TILE_SIZE, y * this.TILE_SIZE, this.TILE_SIZE, this.TILE_SIZE);
+                
+                graphics.lineStyle(1, 0x666666);
+                graphics.strokeRect(x * this.TILE_SIZE, y * this.TILE_SIZE, this.TILE_SIZE, this.TILE_SIZE);
+            }
+        }
     }
+    
+    createPhysicsWalls() {
+        this.walls = this.physics.add.staticGroup();
+        
+        // Create border walls
+        // Top wall
+        const topWall = this.add.rectangle(this.GRID_WIDTH * this.TILE_SIZE / 2, this.TILE_SIZE / 2, 
+            this.GRID_WIDTH * this.TILE_SIZE, this.TILE_SIZE, 0x444444, 0);
+        this.physics.add.existing(topWall, true);
+        this.walls.add(topWall);
+        
+        // Bottom wall
+        const bottomWall = this.add.rectangle(this.GRID_WIDTH * this.TILE_SIZE / 2, 
+            (this.GRID_HEIGHT - 0.5) * this.TILE_SIZE, 
+            this.GRID_WIDTH * this.TILE_SIZE, this.TILE_SIZE, 0x444444, 0);
+        this.physics.add.existing(bottomWall, true);
+        this.walls.add(bottomWall);
+        
+        // Left wall
+        const leftWall = this.add.rectangle(this.TILE_SIZE / 2, this.GRID_HEIGHT * this.TILE_SIZE / 2, 
+            this.TILE_SIZE, this.GRID_HEIGHT * this.TILE_SIZE, 0x444444, 0);
+        this.physics.add.existing(leftWall, true);
+        this.walls.add(leftWall);
+        
+        // Right wall
+        const rightWall = this.add.rectangle((this.GRID_WIDTH - 0.5) * this.TILE_SIZE, 
+            this.GRID_HEIGHT * this.TILE_SIZE / 2, 
+            this.TILE_SIZE, this.GRID_HEIGHT * this.TILE_SIZE, 0x444444, 0);
+        this.physics.add.existing(rightWall, true);
+        this.walls.add(rightWall);
+    }
+    
     
     setupControls() {
         this.cursors = this.input.keyboard.createCursorKeys();
@@ -106,357 +210,74 @@ export default class GameScene extends Phaser.Scene {
         this.keys.D = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D);
         this.keys.T = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.T);
         
-        // Turret placement
+        // Turret menu opening
         this.keys.T.on('down', () => {
-            this.placeTurret();
+            // Only open menu if not already in placement mode
+            if (!this.turretManager.isInPlacementMode()) {
+                this.turretManager.openTurretMenu();
+            }
         });
     }
     
     update(time, delta) {
-        if (!this.player || this.playerStats.health <= 0) return;
+        if (!this.player || this.player.getStats().health <= 0) return;
         
         // Player movement
-        this.updatePlayerMovement();
+        this.player.updateMovement(this.keys, this.cursors);
+        
+        // Update turret placement preview if in placement mode
+        this.turretManager.updatePlacementPreview();
         
         // Auto-shoot
-        this.updateShooting(time);
+        this.player.updateShooting(
+            time,
+            () => this.enemyManager.findNearestEnemy(this.player.getPosition()),
+            (fromX, fromY, toX, toY, speed, damage, color) => this.shootAt(fromX, fromY, toX, toY, speed, damage, color)
+        );
         
         // Spawn enemies
-        this.updateEnemySpawning(time, delta);
+        this.enemyManager.updateSpawning(time, delta);
         
         // Update enemies (move towards player)
-        this.updateEnemies();
+        this.enemyManager.updateEnemies(this.player.sprite);
         
         // Update turrets
-        this.updateTurrets(time);
-    }
-    
-    updatePlayerMovement() {
-        let velocityX = 0;
-        let velocityY = 0;
-        
-        if (this.keys.A.isDown || this.cursors.left.isDown) {
-            velocityX = -this.playerStats.speed;
-        } else if (this.keys.D.isDown || this.cursors.right.isDown) {
-            velocityX = this.playerStats.speed;
-        }
-        
-        if (this.keys.W.isDown || this.cursors.up.isDown) {
-            velocityY = -this.playerStats.speed;
-        } else if (this.keys.S.isDown || this.cursors.down.isDown) {
-            velocityY = this.playerStats.speed;
-        }
-        
-        // Normalize diagonal movement
-        if (velocityX !== 0 && velocityY !== 0) {
-            velocityX *= 0.707;
-            velocityY *= 0.707;
-        }
-        
-        this.player.body.setVelocity(velocityX, velocityY);
-    }
-    
-    updateShooting(time) {
-        if (time > this.playerStats.lastFired + this.playerStats.fireRate) {
-            this.playerStats.lastFired = time;
-            
-            // Find nearest enemy
-            let nearestEnemy = this.findNearestEnemy();
-            if (nearestEnemy) {
-                this.shootAt(
-                    this.player.x,
-                    this.player.y,
-                    nearestEnemy.x,
-                    nearestEnemy.y,
-                    this.playerStats.projectileSpeed,
-                    this.playerStats.projectileDamage,
-                    0x00ffff
-                );
-            }
-        }
+        this.turretManager.updateTurrets(
+            time,
+            (pos, range) => this.enemyManager.findEnemyInRange(pos, range),
+            (fromX, fromY, toX, toY, speed, damage, color) => this.shootAt(fromX, fromY, toX, toY, speed, damage, color)
+        );
     }
     
     shootAt(fromX, fromY, toX, toY, speed, damage, color) {
+        // Create projectile as a simple circle
         const projectile = this.add.circle(fromX, fromY, 5, color);
+        
+        // Add physics to the projectile
         this.physics.add.existing(projectile);
+        
+        // Set projectile data
         projectile.setData('damage', damage);
         
-        // Calculate direction
+        // Add to projectiles group
+        this.projectiles.add(projectile);
+        
+        // Calculate direction and set velocity
         const angle = Math.atan2(toY - fromY, toX - fromX);
         projectile.body.setVelocity(
             Math.cos(angle) * speed,
             Math.sin(angle) * speed
         );
         
-        this.projectiles.add(projectile);
+        // Make sure projectile can move freely
+        projectile.body.setCollideWorldBounds(false);
         
-        // Remove projectile after 3 seconds
+        // Remove projectile after 3 seconds or when it goes off screen
         this.time.delayedCall(3000, () => {
             if (projectile && projectile.active) {
                 projectile.destroy();
             }
         });
-    }
-    
-    findNearestEnemy() {
-        let nearest = null;
-        let minDistance = Infinity;
-        
-        this.enemies.children.entries.forEach(enemy => {
-            const distance = Phaser.Math.Distance.Between(
-                this.player.x,
-                this.player.y,
-                enemy.x,
-                enemy.y
-            );
-            
-            if (distance < minDistance) {
-                minDistance = distance;
-                nearest = enemy;
-            }
-        });
-        
-        return nearest;
-    }
-    
-    updateEnemySpawning(time, delta) {
-        this.enemySpawnTimer += delta;
-        
-        if (this.enemySpawnTimer >= this.enemySpawnRate) {
-            this.enemySpawnTimer = 0;
-            this.spawnEnemy();
-        }
-    }
-    
-    spawnEnemy() {
-        // Spawn at random edge of screen
-        let x, y;
-        const edge = Math.floor(Math.random() * 4);
-        const spawnMargin = 20;
-        
-        switch(edge) {
-            case 0: // top
-                x = Math.random() * GAME_WIDTH;
-                y = -spawnMargin;
-                break;
-            case 1: // right
-                x = GAME_WIDTH + spawnMargin;
-                y = Math.random() * GAME_HEIGHT;
-                break;
-            case 2: // bottom
-                x = Math.random() * GAME_WIDTH;
-                y = GAME_HEIGHT + spawnMargin;
-                break;
-            case 3: // left
-                x = -spawnMargin;
-                y = Math.random() * GAME_HEIGHT;
-                break;
-        }
-        
-        const enemy = this.add.circle(x, y, 12, 0xff0000);
-        this.physics.add.existing(enemy);
-        enemy.body.setCircle(12);
-        
-        // Enemy stats
-        const baseHealth = 30 + (this.wave * 10);
-        enemy.setData('health', baseHealth);
-        enemy.setData('maxHealth', baseHealth);
-        enemy.setData('speed', 50 + (this.wave * 5));
-        enemy.setData('xpValue', 10 + (this.wave * 2));
-        enemy.setData('moneyValue', 5 + this.wave);
-        
-        this.enemies.add(enemy);
-    }
-    
-    updateEnemies() {
-        this.enemies.children.entries.forEach(enemy => {
-            if (!this.player) return;
-            
-            const speed = enemy.getData('speed');
-            this.physics.moveToObject(enemy, this.player, speed);
-        });
-    }
-    
-    hitEnemy(projectile, enemy) {
-        const damage = projectile.getData('damage');
-        let health = enemy.getData('health');
-        health -= damage;
-        
-        if (health <= 0) {
-            // Enemy died - grant XP and money
-            const xpValue = enemy.getData('xpValue');
-            const moneyValue = enemy.getData('moneyValue');
-            
-            this.gainXP(xpValue);
-            this.gainMoney(moneyValue);
-            
-            // Visual feedback
-            const explosion = this.add.circle(enemy.x, enemy.y, 20, 0xff8800, 0.5);
-            this.tweens.add({
-                targets: explosion,
-                alpha: 0,
-                scale: 2,
-                duration: 300,
-                onComplete: () => explosion.destroy()
-            });
-            
-            enemy.destroy();
-        } else {
-            enemy.setData('health', health);
-            // Visual feedback for hit
-            enemy.setFillStyle(0xff6666);
-            this.time.delayedCall(100, () => {
-                if (enemy && enemy.active) {
-                    enemy.setFillStyle(0xff0000);
-                }
-            });
-        }
-        
-        projectile.destroy();
-    }
-    
-    playerHit(player, enemy) {
-        // Damage player
-        this.playerStats.health -= 5;
-        
-        // Visual feedback
-        player.setFillStyle(0xffff00);
-        this.time.delayedCall(100, () => {
-            if (player && player.active) {
-                player.setFillStyle(0x00ff00);
-            }
-        });
-        
-        // Check for game over
-        if (this.playerStats.health <= 0) {
-            this.gameOver();
-        }
-        
-        // Push enemy back slightly
-        const angle = Math.atan2(enemy.y - player.y, enemy.x - player.x);
-        enemy.body.setVelocity(
-            Math.cos(angle) * 200,
-            Math.sin(angle) * 200
-        );
-    }
-    
-    gainXP(amount) {
-        this.playerStats.xp += amount;
-        
-        // Check for level up
-        while (this.playerStats.xp >= this.playerStats.xpToNextLevel) {
-            this.playerStats.xp -= this.playerStats.xpToNextLevel;
-            this.playerStats.level++;
-            this.playerStats.xpToNextLevel = Math.floor(this.playerStats.xpToNextLevel * this.XP_LEVEL_MULTIPLIER);
-            
-            // Level up rewards
-            this.playerStats.maxHealth += 20;
-            this.playerStats.health = this.playerStats.maxHealth;
-            
-            // Show level up notification
-            const centerX = GAME_WIDTH / 2;
-            const centerY = GAME_HEIGHT / 2;
-            const text = this.add.text(centerX, centerY, 'LEVEL UP!', {
-                fontSize: '48px',
-                color: '#ffff00',
-                stroke: '#000000',
-                strokeThickness: 6
-            }).setOrigin(0.5).setDepth(1000);
-            
-            this.tweens.add({
-                targets: text,
-                alpha: 0,
-                y: 300,
-                duration: 2000,
-                onComplete: () => text.destroy()
-            });
-        }
-    }
-    
-    gainMoney(amount) {
-        this.playerStats.money += amount;
-    }
-    
-    placeTurret() {
-        if (this.playerStats.money < this.turretCost) {
-            // Not enough money
-            const text = this.add.text(this.player.x, this.player.y - 30, 'Not enough gold!', {
-                fontSize: '16px',
-                color: '#ff0000'
-            }).setOrigin(0.5);
-            
-            this.tweens.add({
-                targets: text,
-                alpha: 0,
-                y: text.y - 30,
-                duration: 1000,
-                onComplete: () => text.destroy()
-            });
-            return;
-        }
-        
-        this.playerStats.money -= this.turretCost;
-        
-        // Create turret at player position
-        const turret = this.add.rectangle(this.player.x, this.player.y, 30, 30, 0x0088ff);
-        this.physics.add.existing(turret);
-        turret.body.setImmovable(true);
-        
-        turret.setData('lastFired', 0);
-        turret.setData('fireRate', this.turretStats.fireRate);
-        turret.setData('range', this.turretStats.range);
-        turret.setData('projectileSpeed', this.turretStats.projectileSpeed);
-        turret.setData('damage', this.turretStats.projectileDamage);
-        
-        this.turrets.add(turret);
-    }
-    
-    updateTurrets(time) {
-        this.turrets.children.entries.forEach(turret => {
-            const lastFired = turret.getData('lastFired');
-            const fireRate = turret.getData('fireRate');
-            const range = turret.getData('range');
-            
-            if (time > lastFired + fireRate) {
-                // Find enemy in range
-                const target = this.findEnemyInRange(turret, range);
-                
-                if (target) {
-                    turret.setData('lastFired', time);
-                    
-                    this.shootAt(
-                        turret.x,
-                        turret.y,
-                        target.x,
-                        target.y,
-                        turret.getData('projectileSpeed'),
-                        turret.getData('damage'),
-                        0x00aaff
-                    );
-                }
-            }
-        });
-    }
-    
-    findEnemyInRange(turret, range) {
-        let nearest = null;
-        let minDistance = Infinity;
-        
-        this.enemies.children.entries.forEach(enemy => {
-            const distance = Phaser.Math.Distance.Between(
-                turret.x,
-                turret.y,
-                enemy.x,
-                enemy.y
-            );
-            
-            if (distance < range && distance < minDistance) {
-                minDistance = distance;
-                nearest = enemy;
-            }
-        });
-        
-        return nearest;
     }
     
     gameOver() {
@@ -475,8 +296,9 @@ export default class GameScene extends Phaser.Scene {
             strokeThickness: 8
         }).setOrigin(0.5).setDepth(2001);
         
+        const playerStats = this.player.getStats();
         const statsText = this.add.text(centerX, 380, 
-            `Level: ${this.playerStats.level}\nWave: ${this.wave}\n\nPress R to Restart`, {
+            `Level: ${playerStats.level}\nWave: ${this.enemyManager.getCurrentWave()}\n\nPress R to Restart`, {
             fontSize: '24px',
             color: '#ffffff',
             align: 'center'
@@ -489,5 +311,18 @@ export default class GameScene extends Phaser.Scene {
             this.scene.stop('UIScene');
             this.scene.launch('UIScene', { gameScene: this });
         });
+    }
+    
+    // Getter methods for UI Scene
+    getPlayerStats() {
+        return this.player ? this.player.getStats() : null;
+    }
+    
+    getCurrentWave() {
+        return this.enemyManager ? this.enemyManager.getCurrentWave() : 1;
+    }
+    
+    getTurretCost() {
+        return this.turretManager ? this.turretManager.getTurretCost() : 50;
     }
 }
