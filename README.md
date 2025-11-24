@@ -2,6 +2,7 @@
 
 A 2D top-down shooter game inspired by Vampire Survivors, built with Phaser 3. Fight waves of enemies, place turrets, gain XP, collect gold, and upgrade your abilities!
 
+Live Version: [Defundu](https://defendu.vercel.app/)
 ## Features
 
 - **Auto-Shooting Combat**: Your character automatically shoots at the nearest enemy
