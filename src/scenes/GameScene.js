@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GAME_WIDTH, GAME_HEIGHT } from '../index';
+import { GAME_WIDTH, GAME_HEIGHT } from '../../index';
 import Player from '../entities/Player';
 import EnemyManager from '../entities/EnemyManager';
 import TurretManager from '../entities/TurretManager';

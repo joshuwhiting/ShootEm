@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GAME_WIDTH, GAME_HEIGHT } from '../index';
+import { GAME_WIDTH, GAME_HEIGHT } from '../../index';
 
 export default class Player {
     constructor(scene) {

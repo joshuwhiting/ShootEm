@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
-import GameScene from './scenes/GameScene';
-import UIScene from './scenes/UIScene';
+import GameScene from './src/scenes/GameScene';
+import UIScene from './src/scenes/UIScene';
 import { GridEngine } from "grid-engine";
 
 export const GAME_WIDTH = 1280;
